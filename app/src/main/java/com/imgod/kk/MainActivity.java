@@ -1,29 +1,29 @@
 package com.imgod.kk;
 
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
-import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
-import android.util.Log;
-import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+
+import com.imgod.kk.utils.LogUtils;
+import com.imgod.kk.utils.MediaPlayUtils;
+import com.zhy.http.okhttp.OkHttpUtils;
+import com.zhy.http.okhttp.callback.StringCallback;
+import com.zhy.http.okhttp.request.RequestCall;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
-import java.io.IOException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
+import okhttp3.Call;
 
 public class MainActivity extends AppCompatActivity {
+    private static final String TAG = "MainActivity";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -51,53 +51,61 @@ public class MainActivity extends AppCompatActivity {
 
     public static final String ORDER_LIST_URL = "http://www.mf178.cn/customer/order/mytasks";
 
-    private List<TelephoneChargesBean> telephoneChargesBeanList = new ArrayList<>();
-
-    AsyncTask asyncTask;
+    private RequestCall requestPlatformOrderSizeCall;
 
     private void requestPlatformOrderSize() {
-
-        asyncTask = new AsyncTask<Void, Void, Void>() {
+        requestPlatformOrderSizeCall = OkHttpUtils.get().url(ORDER_LIST_URL).build();
+        requestPlatformOrderSizeCall.execute(new StringCallback() {
             @Override
-            protected Void doInBackground(Void... voids) {
-                Document document = null;
-                try {
-                    document = Jsoup.connect(ORDER_LIST_URL).get();
-                    Elements elements = document.getElementsByClass("table table-striped table-bordered table-advance table-hover text-center");
-                    Log.e("Main elements:", elements.html());
-                    Element element = elements.select("tr").first();
-                    Log.e("Main element:", element.html());
-                    Elements tdElements = element.select("td");
-                    telephoneChargesBeanList.clear();
-                    for (int i = 0; i < tdElements.size(); i++) {
-                        Element tempElement = tdElements.get(i);
-                        Log.e("Main tempElement:", tempElement.html());
-                        String techphoneChargeName = getTelephoneChargeName(tempElement.text());
-                        int orderNum = getTelephoneChargeOrderNum(tempElement.getElementsByClass("text-success").get(0).text());
-                        Log.e("Main tempElement text:", techphoneChargeName);
-                        Log.e("Main tempElement span:", "数量:" + orderNum);
-                        if (techphoneChargeName.equals(selectTechphoneChargeName)) {
-                            if (orderNum > 0) {
-                                //如果该选项还有剩余订单的话,那这个时候应该先发起抢订单的操作
-                                Log.e("Main", techphoneChargeName + "话费单有库存,请及时去抢单");
-                            } else {
-                                //如果没有数量 那就应该执行刷新操作了
-                                requestPlatformOrderSize();
-                            }
-
-                            break;
-                        }
-                    }
-
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                return null;
+            public void onError(Call call, Exception e, int id) {
+                requestPlatformOrderSize();
             }
-        }.execute();
 
-
+            @Override
+            public void onResponse(String response, int id) {
+                parseResponse(response);
+            }
+        });
     }
+
+
+    /**
+     * 解析网络请求得到的数据
+     */
+    private void parseResponse(String content) {
+        Document document = null;
+        try {
+            document = Jsoup.parse(content);
+            Elements elements = document.getElementsByClass("table table-striped table-bordered table-advance table-hover text-center");
+            LogUtils.e(TAG, elements.html());
+            Element element = elements.select("tr").first();
+            LogUtils.e(TAG, element.html());
+            Elements tdElements = element.select("td");
+            for (int i = 0; i < tdElements.size(); i++) {
+                Element tempElement = tdElements.get(i);
+                LogUtils.e(TAG, tempElement.html());
+                String techphoneChargeName = getTelephoneChargeName(tempElement.text());
+                int orderNum = getTelephoneChargeOrderNum(tempElement.getElementsByClass("text-success").get(0).text());
+                LogUtils.e(TAG, techphoneChargeName);
+                LogUtils.e(TAG, "数量:" + orderNum);
+                if (techphoneChargeName.equals(selectTechphoneChargeName)) {
+                    if (orderNum > 0) {
+                        //如果该选项还有剩余订单的话,那这个时候应该先发起抢订单的操作
+                        LogUtils.e(TAG, techphoneChargeName + "话费单有库存,请及时去抢单");
+//                        MediaPlayUtils.playSound(MainActivity.this, "memeda.wav");
+                    } else {
+                        //如果没有数量 那就应该执行刷新操作了
+                        requestPlatformOrderSize();
+                    }
+                    break;
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
 
     private String getTelephoneChargeName(String text) {
         if (!TextUtils.isEmpty(text)) {
@@ -116,9 +124,15 @@ public class MainActivity extends AppCompatActivity {
         return 0;
     }
 
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        MediaPlayUtils.stopPlay();
+    }
+
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_main, menu);
         return true;
     }
@@ -128,16 +142,13 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
         if (id == selectId) {
             return super.onOptionsItemSelected(item);
         }
         selectId = id;
-        if (null != asyncTask && !asyncTask.isCancelled()) {
-            asyncTask.cancel(true);
+        if (null != requestPlatformOrderSizeCall) {
+            requestPlatformOrderSizeCall.cancel();
         }
         //noinspection SimplifiableIfStatement
         switch (id) {
