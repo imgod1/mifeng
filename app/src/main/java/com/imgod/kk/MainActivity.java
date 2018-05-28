@@ -1,5 +1,7 @@
 package com.imgod.kk;
 
+import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.AppCompatActivity;
@@ -24,6 +26,11 @@ import okhttp3.Call;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
+
+    public static void actionStart(Context context) {
+        Intent intent = new Intent(context, MainActivity.class);
+        context.startActivity(intent);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,6 +76,32 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    private static final String GET_TASK_URL = "http://www.mf178.cn/customer/order/get_tasks";
+
+    private void requestGetTask(String amount, String count) {
+        requestPlatformOrderSizeCall = OkHttpUtils.get().url(GET_TASK_URL)
+                .addParams("amount", amount)
+                .addParams("count", count)
+                .build();
+        requestPlatformOrderSizeCall.execute(new StringCallback() {
+            @Override
+            public void onError(Call call, Exception e, int id) {
+                requestPlatformOrderSize();
+            }
+
+            @Override
+            public void onResponse(String response, int id) {
+                parseGetTaskResponse();
+            }
+        });
+    }
+
+
+    private void parseGetTaskResponse() {
+
+    }
+
+
     /**
      * 解析网络请求得到的数据
      */
@@ -93,6 +126,7 @@ public class MainActivity extends AppCompatActivity {
                         //如果该选项还有剩余订单的话,那这个时候应该先发起抢订单的操作
                         LogUtils.e(TAG, techphoneChargeName + "话费单有库存,请及时去抢单");
 //                        MediaPlayUtils.playSound(MainActivity.this, "memeda.wav");
+                        requestGetTask(techphoneChargeName.replace("元", ""), "1");
                     } else {
                         //如果没有数量 那就应该执行刷新操作了
                         requestPlatformOrderSize();

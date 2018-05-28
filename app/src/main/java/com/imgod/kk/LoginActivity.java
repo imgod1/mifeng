@@ -12,6 +12,7 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import com.imgod.kk.utils.LogUtils;
 import com.imgod.kk.utils.ToastUtils;
 import com.zhy.http.okhttp.OkHttpUtils;
 import com.zhy.http.okhttp.callback.BitmapCallback;
@@ -64,8 +65,7 @@ public class LoginActivity extends BaseActivity {
         });
 
         mLoginFormView = findViewById(R.id.login_form);
-
-        loadImageCode();
+        requestIndexHomePage(REFRESH_TYPE_GET_COOKIE);
     }
 
 
@@ -129,9 +129,10 @@ public class LoginActivity extends BaseActivity {
     }
 
 
-    private static final String IMG_CODE_URL = "http://www.mf178.cn/login/captcha";
+    public static final String IMG_CODE_URL = "http://www.mf178.cn/login/captcha";
 
     private void loadImageCode() {
+        showProgressDialog();
         OkHttpUtils
                 .get()//
                 .url(IMG_CODE_URL)//
@@ -139,22 +140,24 @@ public class LoginActivity extends BaseActivity {
                 .execute(new BitmapCallback() {
                     @Override
                     public void onError(Call call, Exception e, int id) {
+                        hideProgressDialog();
                         ToastUtils.showToastShort(LoginActivity.this, "图片验证码加载失败,请重试");
                         iv_code.setImageResource(R.drawable.ic_img_load_error);
                     }
 
                     @Override
                     public void onResponse(Bitmap response, int id) {
+                        hideProgressDialog();
                         iv_code.setImageBitmap(response);
                     }
                 });
     }
 
-    private static final String LOGIN_URL = "http://www.mf178.cn/login/index";
+    public static final String LOGIN_URL = "http://www.mf178.cn/login/index";
 
     private void requestLogin(String phone, String pwd, String imgCode) {
         OkHttpUtils
-                .get()
+                .post()
                 .url(LOGIN_URL)
                 .addParams("username", phone)
                 .addParams("password", pwd)
@@ -163,14 +166,58 @@ public class LoginActivity extends BaseActivity {
                 .execute(new StringCallback() {
                     @Override
                     public void onError(Call call, Exception e, int id) {
+                        LogUtils.e("onError", e.getMessage());
                         ToastUtils.showToastShort(LoginActivity.this, "登录失败:" + e.getMessage());
                     }
 
                     @Override
                     public void onResponse(String response, int id) {
-                        ToastUtils.showToastShort(LoginActivity.this, "登录成功:" + response);
+                        LogUtils.e("onResponse", response);
+                        requestIndexHomePage(REFRESH_TYPE_GET_LOGIN_STATUS);
                     }
                 });
+    }
+
+
+    public static final String INDEX_URL = "http://www.mf178.cn";
+
+    private int REFRESH_TYPE_GET_COOKIE = 0x00;
+    private int REFRESH_TYPE_GET_LOGIN_STATUS = 0x01;
+
+    private void requestIndexHomePage(final int type) {
+        OkHttpUtils
+                .get()
+                .url(INDEX_URL)
+                .build()
+                .execute(new StringCallback() {
+                    @Override
+                    public void onError(Call call, Exception e, int id) {
+                        LogUtils.e("onError", e.getMessage());
+                        ToastUtils.showToastShort(LoginActivity.this, "登录失败:" + e.getMessage());
+                    }
+
+                    @Override
+                    public void onResponse(String response, int id) {
+                        LogUtils.e("onResponse", response);
+                        if (type == REFRESH_TYPE_GET_LOGIN_STATUS) {
+                            parseLoginResponse(response);
+                        } else if (type == REFRESH_TYPE_GET_COOKIE) {
+                            loadImageCode();
+                        }
+                    }
+                });
+    }
+
+    private void parseLoginResponse(String response) {
+        if (response.contains("登录成功")) {
+            ToastUtils.showToastShort(LoginActivity.this, "登录成功");
+            MainActivity.actionStart(LoginActivity.this);
+            finish();
+        } else if (response.contains("验证码错误")) {
+            ToastUtils.showToastShort(LoginActivity.this, "验证码错误");
+        } else {
+            ToastUtils.showToastShort(LoginActivity.this, "密码错误");
+        }
     }
 
 }
