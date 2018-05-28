@@ -13,6 +13,7 @@ import android.view.View;
 
 import com.imgod.kk.utils.LogUtils;
 import com.imgod.kk.utils.MediaPlayUtils;
+import com.imgod.kk.utils.ToastUtils;
 import com.zhy.http.okhttp.OkHttpUtils;
 import com.zhy.http.okhttp.callback.StringCallback;
 import com.zhy.http.okhttp.request.RequestCall;
@@ -56,6 +57,8 @@ public class MainActivity extends AppCompatActivity {
         selectTechphoneChargeName = getString(R.string.action_30);
     }
 
+
+    //获取平台上现在的订单量
     public static final String ORDER_LIST_URL = "http://www.mf178.cn/customer/order/mytasks";
 
     private RequestCall requestPlatformOrderSizeCall;
@@ -69,13 +72,79 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
+            public void onResponse(String response, int id) {//
+                if (response.contains("平台暂未订单，请稍后再试")) {
+                    ToastUtils.showToastShort(MainActivity.this, "平台暂未订单，请稍后再试");
+                    requestPlatformOrderSize();
+                } else {
+                    parseOrderSizeResponse(response);
+                }
+            }
+        });
+    }
+
+    /**
+     * 解析网络请求得到的数据
+     */
+    private void parseOrderSizeResponse(String content) {
+        Document document = null;
+        try {
+            document = Jsoup.parse(content);
+            Elements elements = document.getElementsByClass("table table-striped table-bordered table-advance table-hover text-center");
+            LogUtils.e(TAG, elements.html());
+            Element element = elements.select("tr").first();
+            LogUtils.e(TAG, element.html());
+            Elements tdElements = element.select("td");
+            for (int i = 0; i < tdElements.size(); i++) {
+                Element tempElement = tdElements.get(i);
+                LogUtils.e(TAG, tempElement.html());
+                String techphoneChargeName = getTelephoneChargeName(tempElement.text());
+                int orderNum = getTelephoneChargeOrderNum(tempElement.getElementsByClass("text-success").get(0).text());
+                LogUtils.e(TAG, techphoneChargeName);
+                LogUtils.e(TAG, "数量:" + orderNum);
+                if (techphoneChargeName.equals(selectTechphoneChargeName)) {
+                    if (orderNum > 0) {
+                        //如果该选项还有剩余订单的话,那这个时候应该先发起抢订单的操作
+                        LogUtils.e(TAG, techphoneChargeName + "话费单有库存,请及时去抢单");
+//                        MediaPlayUtils.playSound(MainActivity.this, "memeda.wav");
+                        requestGetTaskWarn(techphoneChargeName.replace("元", ""), "1");
+                    } else {
+                        //如果没有数量 那就应该执行刷新操作了
+                        requestPlatformOrderSize();
+                    }
+                    break;
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    //请求获取任务之前的确认弹窗
+    private static final String GET_TASK_WARN_URL = "http://www.mf178.cn/customer/order/ajax";
+
+    private void requestGetTaskWarn(final String amount, final String count) {
+        requestPlatformOrderSizeCall = OkHttpUtils.get().url(GET_TASK_WARN_URL)
+                .addParams("action", "get_tasks")
+                .addParams("amount", amount)
+                .build();
+        requestPlatformOrderSizeCall.execute(new StringCallback() {
+            @Override
+            public void onError(Call call, Exception e, int id) {
+                requestGetTaskWarn(amount, count);
+            }
+
+            @Override
             public void onResponse(String response, int id) {
-                parseResponse(response);
+                requestGetTask(amount, count);
             }
         });
     }
 
 
+    //真正请求获取任务
     private static final String GET_TASK_URL = "http://www.mf178.cn/customer/order/get_tasks";
 
     private void requestGetTask(String amount, String count) {
@@ -99,45 +168,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void parseGetTaskResponse() {
 
-    }
-
-
-    /**
-     * 解析网络请求得到的数据
-     */
-    private void parseResponse(String content) {
-        Document document = null;
-        try {
-            document = Jsoup.parse(content);
-            Elements elements = document.getElementsByClass("table table-striped table-bordered table-advance table-hover text-center");
-            LogUtils.e(TAG, elements.html());
-            Element element = elements.select("tr").first();
-            LogUtils.e(TAG, element.html());
-            Elements tdElements = element.select("td");
-            for (int i = 0; i < tdElements.size(); i++) {
-                Element tempElement = tdElements.get(i);
-                LogUtils.e(TAG, tempElement.html());
-                String techphoneChargeName = getTelephoneChargeName(tempElement.text());
-                int orderNum = getTelephoneChargeOrderNum(tempElement.getElementsByClass("text-success").get(0).text());
-                LogUtils.e(TAG, techphoneChargeName);
-                LogUtils.e(TAG, "数量:" + orderNum);
-                if (techphoneChargeName.equals(selectTechphoneChargeName)) {
-                    if (orderNum > 0) {
-                        //如果该选项还有剩余订单的话,那这个时候应该先发起抢订单的操作
-                        LogUtils.e(TAG, techphoneChargeName + "话费单有库存,请及时去抢单");
-//                        MediaPlayUtils.playSound(MainActivity.this, "memeda.wav");
-                        requestGetTask(techphoneChargeName.replace("元", ""), "1");
-                    } else {
-                        //如果没有数量 那就应该执行刷新操作了
-                        requestPlatformOrderSize();
-                    }
-                    break;
-                }
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
     }
 
 

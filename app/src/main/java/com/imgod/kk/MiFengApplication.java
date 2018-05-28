@@ -6,6 +6,7 @@ import com.imgod.kk.utils.LogUtils;
 import com.zhy.http.okhttp.OkHttpUtils;
 import com.zhy.http.okhttp.cookie.CookieJarImpl;
 import com.zhy.http.okhttp.cookie.store.PersistentCookieStore;
+import com.zhy.http.okhttp.log.LoggerInterceptor;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -48,41 +49,29 @@ public class MiFengApplication extends Application {
                 cookieStore.put(url, cookies);
                 cookieStore.put(HttpUrl.parse("www.mf178.cn"), cookies);
                 for (Cookie cookie : cookies) {
-                    LogUtils.e(TAG, "cookie Name:" + cookie.name());
-                    LogUtils.e(TAG, "cookie Value:" + cookie.value());
+                    LogUtils.e(TAG, "save cookie Name:" + cookie.name());
+                    LogUtils.e(TAG, "save cookie Value:" + cookie.value());
                 }
                 super.saveFromResponse(url, cookies);
             }
 
-            //            @Override
-//            public void saveFromResponse(HttpUrl url, List<Cookie> cookies) {
-//                cookieStore.put(url, cookies);
-//                cookieStore.put(HttpUrl.parse(LoginActivity.INDEX_URL), cookies);
-//                for (Cookie cookie : cookies) {
-//                    LogUtils.e(TAG, "cookie Name:" + cookie.name());
-//                    LogUtils.e(TAG, "cookie Path:" + cookie.path());
-//                }
-//            }
-
             @Override
             public synchronized List<Cookie> loadForRequest(HttpUrl url) {
                 List<Cookie> cookies = cookieStore.get(HttpUrl.parse("www.mf178.cn"));
-                if (cookies == null) {
+
+                if (null != cookies && cookies.size() > 0) {
+                    for (Cookie cookie : cookies) {
+                        LogUtils.e(TAG, "load cookie Name:" + cookie.name());
+                        LogUtils.e(TAG, "load cookie Value:" + cookie.value());
+                    }
+                } else {
                     LogUtils.e(TAG, "没加载到cookie");
                 }
+
 //                return super.loadForRequest(url);
                 return cookies != null ? cookies : new ArrayList<Cookie>();
             }
 
-
-//            @Override
-//            public List<Cookie> loadForRequest(HttpUrl url) {
-//                List<Cookie> cookies = cookieStore.get(HttpUrl.parse("http://192.168.31.231:8080/shiro-2"));
-//                if (cookies == null) {
-//                    LogUtils.e(TAG, "没加载到cookie");
-//                }
-//                return cookies != null ? cookies : new ArrayList<Cookie>();
-//            }
         };
 
         OkHttpClient okHttpClient = new OkHttpClient.Builder()
@@ -105,6 +94,7 @@ public class MiFengApplication extends Application {
                         return chain.proceed(request);
                     }
                 })
+                .addInterceptor(new LoggerInterceptor("mifeng"))
                 .build();
         OkHttpUtils.initClient(okHttpClient);
     }
