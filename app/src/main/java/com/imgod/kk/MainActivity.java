@@ -3,13 +3,14 @@ package com.imgod.kk;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.text.TextUtils;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.Button;
+import android.widget.TextView;
 
 import com.imgod.kk.utils.LogUtils;
 import com.imgod.kk.utils.MediaPlayUtils;
@@ -41,46 +42,77 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    private TextView tv_hint;
+    private TextView tv_result;
+    Toolbar toolbar;
+    Button btn_action;
+
     private void initViews() {
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
-        fab.setOnClickListener(new View.OnClickListener() {
+        tv_hint = findViewById(R.id.tv_hint);
+        tv_result = findViewById(R.id.tv_result);
+
+        btn_action = findViewById(R.id.btn_action);
+        btn_action.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                requestPlatformOrderSize();
+                String title = btn_action.getText().toString();
+                if (title.equals("开始")) {
+                    btn_action.setText("停止");
+                    requestPlatformOrderSize();
+                } else {
+                    btn_action.setText("开始");
+                    requestPlatformOrderSizeCall.cancel();
+                }
+
             }
         });
-
         selectId = R.id.action_30;
         selectTechphoneChargeName = getString(R.string.action_30);
+        setToolBarTitle();
+    }
+
+    private void setToolBarTitle() {
+        toolbar.setTitle("蜜蜂抢单: " + selectTechphoneChargeName);
     }
 
 
+    private long loopTimes = 0;
     //获取平台上现在的订单量
     public static final String ORDER_LIST_URL = "http://www.mf178.cn/customer/order/mytasks";
 
     private RequestCall requestPlatformOrderSizeCall;
 
-    private void requestPlatformOrderSize() {
-        requestPlatformOrderSizeCall = OkHttpUtils.get().url(ORDER_LIST_URL).build();
-        requestPlatformOrderSizeCall.execute(new StringCallback() {
-            @Override
-            public void onError(Call call, Exception e, int id) {
-                requestPlatformOrderSize();
-            }
 
+    private void requestPlatformOrderSize() {
+        loopTimes++;
+        tv_hint.setText("正在为你进行第" + loopTimes + "次尝试");
+        tv_result.setVisibility(View.GONE);
+
+        btn_action.postDelayed(new Runnable() {
             @Override
-            public void onResponse(String response, int id) {//
-                if (response.contains("平台暂未订单，请稍后再试")) {
-                    ToastUtils.showToastShort(MainActivity.this, "平台暂未订单，请稍后再试");
-                    requestPlatformOrderSize();
-                } else {
-                    parseOrderSizeResponse(response);
-                }
+            public void run() {
+                requestPlatformOrderSizeCall = OkHttpUtils.get().url(ORDER_LIST_URL).build();
+                requestPlatformOrderSizeCall.execute(new StringCallback() {
+                    @Override
+                    public void onError(Call call, Exception e, int id) {
+                        requestPlatformOrderSize();
+                    }
+
+                    @Override
+                    public void onResponse(String response, int id) {//
+                        if (response.contains("平台暂未订单，请稍后再试")) {
+                            ToastUtils.showToastShort(MainActivity.this, "平台暂未订单，请稍后再试");
+                            requestPlatformOrderSize();
+                        } else {
+                            parseOrderSizeResponse(response);
+                        }
+                    }
+                });
             }
-        });
+        }, 500);
     }
 
     /**
@@ -91,22 +123,19 @@ public class MainActivity extends AppCompatActivity {
         try {
             document = Jsoup.parse(content);
             Elements elements = document.getElementsByClass("table table-striped table-bordered table-advance table-hover text-center");
-            LogUtils.e(TAG, elements.html());
             Element element = elements.select("tr").first();
-            LogUtils.e(TAG, element.html());
             Elements tdElements = element.select("td");
             for (int i = 0; i < tdElements.size(); i++) {
                 Element tempElement = tdElements.get(i);
-                LogUtils.e(TAG, tempElement.html());
                 String techphoneChargeName = getTelephoneChargeName(tempElement.text());
                 int orderNum = getTelephoneChargeOrderNum(tempElement.getElementsByClass("text-success").get(0).text());
-                LogUtils.e(TAG, techphoneChargeName);
-                LogUtils.e(TAG, "数量:" + orderNum);
                 if (techphoneChargeName.equals(selectTechphoneChargeName)) {
+                    LogUtils.e(TAG, techphoneChargeName);
+                    LogUtils.e(TAG, "数量:" + orderNum);
+
                     if (orderNum > 0) {
                         //如果该选项还有剩余订单的话,那这个时候应该先发起抢订单的操作
                         LogUtils.e(TAG, techphoneChargeName + "话费单有库存,请及时去抢单");
-//                        MediaPlayUtils.playSound(MainActivity.this, "memeda.wav");
                         requestGetTaskWarn(techphoneChargeName.replace("元", ""), "1");
                     } else {
                         //如果没有数量 那就应该执行刷新操作了
@@ -155,19 +184,36 @@ public class MainActivity extends AppCompatActivity {
         requestPlatformOrderSizeCall.execute(new StringCallback() {
             @Override
             public void onError(Call call, Exception e, int id) {
-                requestPlatformOrderSize();
+                if (!call.isCanceled()) {
+                    requestPlatformOrderSize();
+                }
             }
 
             @Override
             public void onResponse(String response, int id) {
-                parseGetTaskResponse();
+                parseGetTaskResponse(response);
             }
         });
     }
 
 
-    private void parseGetTaskResponse() {
+    private void parseGetTaskResponse(String response) {
+        if (response.contains("成功获取1条订单,请在指定时间内完成订单")) {//成功获取到号码
+            Document document = Jsoup.parse(response);
+            Elements elements = document.getElementsByClass("btn btn-xs btn-info copy_btn");
+            if (elements.size() > 0) {
+                Element resultElement = elements.get(0);
+                LogUtils.e(TAG, "resultElement:" + resultElement.text());
+                tv_result.setText("获取到的手机号码为:" + resultElement.text());
+                tv_result.setVisibility(View.VISIBLE);
 
+                MediaPlayUtils.playSound(MainActivity.this, "memeda.wav");
+            } else {
+                requestPlatformOrderSize();
+            }
+        } else {
+            requestPlatformOrderSize();
+        }
     }
 
 
@@ -235,7 +281,8 @@ public class MainActivity extends AppCompatActivity {
                 selectTechphoneChargeName = getString(R.string.action_500);
                 break;
         }
-        requestPlatformOrderSize();
+        setToolBarTitle();
+        loopTimes = 0;
         return super.onOptionsItemSelected(item);
     }
 }

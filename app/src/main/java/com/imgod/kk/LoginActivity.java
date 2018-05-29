@@ -51,7 +51,7 @@ public class LoginActivity extends BaseActivity {
         iv_code.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
-                loadImageCode();
+                requestLoadImageCode();
             }
         });
 
@@ -65,7 +65,8 @@ public class LoginActivity extends BaseActivity {
         });
 
         mLoginFormView = findViewById(R.id.login_form);
-        requestIndexHomePage(REFRESH_TYPE_GET_COOKIE);
+//        requestIndexHomePage(REFRESH_TYPE_GET_COOKIE);
+        requestLoadImageCode();
     }
 
 
@@ -131,7 +132,7 @@ public class LoginActivity extends BaseActivity {
 
     public static final String IMG_CODE_URL = "http://www.mf178.cn/login/captcha";
 
-    private void loadImageCode() {
+    private void requestLoadImageCode() {
         showProgressDialog();
         OkHttpUtils
                 .get()//
@@ -156,6 +157,7 @@ public class LoginActivity extends BaseActivity {
     public static final String LOGIN_URL = "http://www.mf178.cn/login/index";
 
     private void requestLogin(String phone, String pwd, String imgCode) {
+        showProgressDialog();
         OkHttpUtils
                 .post()
                 .url(LOGIN_URL)
@@ -166,12 +168,14 @@ public class LoginActivity extends BaseActivity {
                 .execute(new StringCallback() {
                     @Override
                     public void onError(Call call, Exception e, int id) {
+                        hideProgressDialog();
                         LogUtils.e("onError", e.getMessage());
                         ToastUtils.showToastShort(LoginActivity.this, "登录失败:" + e.getMessage());
                     }
 
                     @Override
                     public void onResponse(String response, int id) {
+                        hideProgressDialog();
                         LogUtils.e("onResponse", response);
                         requestIndexHomePage(REFRESH_TYPE_GET_LOGIN_STATUS);
                     }
@@ -185,6 +189,7 @@ public class LoginActivity extends BaseActivity {
     private int REFRESH_TYPE_GET_LOGIN_STATUS = 0x01;
 
     private void requestIndexHomePage(final int type) {
+        showProgressDialog();
         OkHttpUtils
                 .get()
                 .url(INDEX_URL)
@@ -193,16 +198,18 @@ public class LoginActivity extends BaseActivity {
                     @Override
                     public void onError(Call call, Exception e, int id) {
                         LogUtils.e("onError", e.getMessage());
+                        hideProgressDialog();
                         ToastUtils.showToastShort(LoginActivity.this, "登录失败:" + e.getMessage());
                     }
 
                     @Override
                     public void onResponse(String response, int id) {
+                        hideProgressDialog();
                         LogUtils.e("onResponse", response);
                         if (type == REFRESH_TYPE_GET_LOGIN_STATUS) {
                             parseLoginResponse(response);
                         } else if (type == REFRESH_TYPE_GET_COOKIE) {
-                            loadImageCode();
+                            requestLoadImageCode();
                         }
                     }
                 });
@@ -215,6 +222,7 @@ public class LoginActivity extends BaseActivity {
             finish();
         } else if (response.contains("验证码错误")) {
             ToastUtils.showToastShort(LoginActivity.this, "验证码错误");
+            requestLoadImageCode();
         } else {
             ToastUtils.showToastShort(LoginActivity.this, "密码错误");
         }
