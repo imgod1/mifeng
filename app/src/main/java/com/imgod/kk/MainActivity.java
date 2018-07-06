@@ -28,6 +28,9 @@ import okhttp3.Call;
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
+    public static final int RUSH_MODEL_NOT_RUSH = 0;//不抢购
+    public static final int RUSH_MODEL_RUSH = 1;//抢购
+    private int rush_model = RUSH_MODEL_NOT_RUSH;
 
     public static void actionStart(Context context) {
         Intent intent = new Intent(context, MainActivity.class);
@@ -61,9 +64,11 @@ public class MainActivity extends AppCompatActivity {
                 String title = btn_action.getText().toString();
                 if (title.equals("开始")) {
                     btn_action.setText("停止");
+                    rush_model = RUSH_MODEL_RUSH;
                     requestPlatformOrderSize();
                 } else {
                     btn_action.setText("开始");
+                    rush_model = RUSH_MODEL_NOT_RUSH;
                     requestPlatformOrderSizeCall.cancel();
                 }
 
@@ -87,32 +92,36 @@ public class MainActivity extends AppCompatActivity {
 
 
     private void requestPlatformOrderSize() {
-        loopTimes++;
-        tv_hint.setText("正在为你进行第" + loopTimes + "次尝试");
-        tv_result.setVisibility(View.GONE);
+        if (rush_model == RUSH_MODEL_RUSH) {
+            loopTimes++;
+            tv_hint.setText("正在为你进行第" + loopTimes + "次尝试");
+            tv_result.setVisibility(View.GONE);
 
-        btn_action.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                requestPlatformOrderSizeCall = OkHttpUtils.get().url(ORDER_LIST_URL).build();
-                requestPlatformOrderSizeCall.execute(new StringCallback() {
-                    @Override
-                    public void onError(Call call, Exception e, int id) {
-                        requestPlatformOrderSize();
-                    }
-
-                    @Override
-                    public void onResponse(String response, int id) {//
-                        if (response.contains("平台暂未订单，请稍后再试")) {
-                            ToastUtils.showToastShort(MainActivity.this, "平台暂未订单，请稍后再试");
-                            requestPlatformOrderSize();
-                        } else {
-                            parseOrderSizeResponse(response);
+            btn_action.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    requestPlatformOrderSizeCall = OkHttpUtils.get().url(ORDER_LIST_URL).build();
+                    requestPlatformOrderSizeCall.execute(new StringCallback() {
+                        @Override
+                        public void onError(Call call, Exception e, int id) {
+                            if (!call.isCanceled()) {
+                                requestPlatformOrderSize();
+                            }
                         }
-                    }
-                });
-            }
-        }, 500);
+
+                        @Override
+                        public void onResponse(String response, int id) {//
+                            if (response.contains("平台暂未订单，请稍后再试")) {
+                                ToastUtils.showToastShort(MainActivity.this, "平台暂未订单，请稍后再试");
+                                requestPlatformOrderSize();
+                            } else {
+                                parseOrderSizeResponse(response);
+                            }
+                        }
+                    });
+                }
+            }, 500);
+        }
     }
 
     /**
@@ -151,18 +160,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    private RequestCall requestGetTaskWarnCall;
     //请求获取任务之前的确认弹窗
     private static final String GET_TASK_WARN_URL = "http://www.mf178.cn/customer/order/ajax";
 
     private void requestGetTaskWarn(final String amount, final String count) {
-        requestPlatformOrderSizeCall = OkHttpUtils.get().url(GET_TASK_WARN_URL)
+        requestGetTaskWarnCall = OkHttpUtils.get().url(GET_TASK_WARN_URL)
                 .addParams("action", "get_tasks")
                 .addParams("amount", amount)
                 .build();
-        requestPlatformOrderSizeCall.execute(new StringCallback() {
+        requestGetTaskWarnCall.execute(new StringCallback() {
             @Override
             public void onError(Call call, Exception e, int id) {
-                requestGetTaskWarn(amount, count);
+                if (!call.isCanceled()) {
+                    requestGetTaskWarn(amount, count);
+                }
             }
 
             @Override
@@ -173,15 +185,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    private RequestCall requestGetTaskCall;
     //真正请求获取任务
-    private static final String GET_TASK_URL = "http://www.mf178.cn/customer/order/get_tasks";
+    private static final String GET_TASK_URL = "http://www.mf178.cn/customer/order/get_tasks?contract%5B%5D=1&contract%5B%5D=2&contract%5B%5D=4&contract%5B%5D=8&contract%5B%5D=16&contract%5B%5D=32&contract%5B%5D=256&contract%5B%5D=64&contract%5B%5D=128&SEQ=1530858401";
 
     private void requestGetTask(String amount, String count) {
-        requestPlatformOrderSizeCall = OkHttpUtils.get().url(GET_TASK_URL)
+        requestGetTaskCall = OkHttpUtils.get().url(GET_TASK_URL)
                 .addParams("amount", amount)
                 .addParams("count", count)
                 .build();
-        requestPlatformOrderSizeCall.execute(new StringCallback() {
+        requestGetTaskCall.execute(new StringCallback() {
             @Override
             public void onError(Call call, Exception e, int id) {
                 if (!call.isCanceled()) {
@@ -191,6 +204,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onResponse(String response, int id) {
+                LogUtils.e(TAG, "requestGetTask onResponse: "+response);
                 parseGetTaskResponse(response);
             }
         });

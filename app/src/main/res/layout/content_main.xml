@@ -15,7 +15,7 @@
         android:layout_height="50dp"
         android:background="#303f9f"
         android:gravity="center"
-        android:text="30元单"
+        android:text="请先在右上角选择话费面额"
         android:textColor="@android:color/white"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
